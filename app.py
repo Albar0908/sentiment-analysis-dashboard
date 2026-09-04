@@ -1,16 +1,17 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import joblib
+import os
 import re
+import joblib
+import matplotlib.pyplot as plt
 import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
+import numpy as np
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 from wordcloud import WordCloud
-import matplotlib.pyplot as plt
 
 # --- 1. KONFIGURASI HALAMAN & CSS DASHBOARD ---
 st.set_page_config(
@@ -52,12 +53,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. SETUP PREPROCESSING & RESOURCE ---
+# --- 2. SETUP PREPROCESSING & RESOURCE NLTK ---
 @st.cache_resource
 def setup_nltk():
-    nltk.download('punkt', quiet=True)
-    nltk.download('stopwords', quiet=True)
-    nltk.download('wordnet', quiet=True)
+    nltk_data_dir = os.path.expanduser('~/nltk_data')
+    os.makedirs(nltk_data_dir, exist_ok=True)
+    
+    if nltk_data_dir not in nltk.data.path:
+        nltk.data.path.append(nltk_data_dir)
+
+    packages = ['punkt', 'punkt_tab', 'stopwords', 'wordnet']
+    for pkg in packages:
+        nltk.download(pkg, download_dir=nltk_data_dir, quiet=True)
 
 setup_nltk()
 lemmatizer = WordNetLemmatizer()
@@ -98,7 +105,7 @@ with st.sidebar:
 # --- 4. DATA LOADING ---
 @st.cache_data
 def get_sample_data():
-    url = 'https://raw.githubusercontent.com/Faiqazmi/Dataset_latihan/main/IMDB_small_size.csv'
+    url = 'https://raw.githubusercontent.com/Faiqazmi/Dataset_latihan/main/IMDB_small_size.csv'[cite: 1]
     return pd.read_csv(url).head(300)
 
 if uploaded_file:
@@ -123,9 +130,9 @@ if app_mode == "📈 Analisis Batch (Executive Dashboard)":
                 df_current['pred_label'] = np.where(preds == 1, 'positive', 'negative')
                 df_current['confidence'] = np.max(probs, axis=1) * 100
         else:
+            df_current['cleaned_review'] = df_current['review'].apply(preprocess_text)
             df_current['pred_label'] = df_current.get('sentiment', 'positive')
             df_current['confidence'] = 85.0
-            df_current['cleaned_review'] = df_current['review'].apply(preprocess_text)
 
         total = len(df_current)
         pos = (df_current['pred_label'] == 'positive').sum()
@@ -179,7 +186,7 @@ if app_mode == "📈 Analisis Batch (Executive Dashboard)":
                 textinfo='label+percent'
             )])
             fig_pie.update_layout(showlegend=False, height=320, margin=dict(t=20, b=20, l=20, r=20))
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie, width="stretch")
 
         with c_wc:
             st.subheader("Word Cloud Kata Kunci")
@@ -205,7 +212,7 @@ if app_mode == "📈 Analisis Batch (Executive Dashboard)":
                 "pred_label": st.column_config.TextColumn("Label Prediksi"),
                 "confidence": st.column_config.ProgressColumn("Confidence Score", format="%.2f%%", min_value=0, max_value=100)
             },
-            use_container_width=True,
+            width="stretch",
             height=300
         )
     else:
@@ -217,7 +224,11 @@ elif app_mode == "🧪 Live Prediction Sandbox":
 
     col_in, col_out = st.columns([1.2, 1])
     with col_in:
-        user_text = st.text_area("Tulis ulasan film di sini:", height=180, placeholder="Contoh: Brilliant movie with an incredible storyline and phenomenal acting!")
+        user_text = st.text_area(
+            "Tulis ulasan film di sini:", 
+            height=180, 
+            placeholder="Contoh: Brilliant movie with an incredible storyline and phenomenal acting!"
+        )
         run_btn = st.button("Jalankan Analisis", type="primary")
 
     with col_out:
@@ -244,11 +255,14 @@ elif app_mode == "🧪 Live Prediction Sandbox":
                     gauge={
                         'axis': {'range': [50, 100]},
                         'bar': {'color': g_color},
-                        'steps': [{'range': [50, 75], 'color': "#f1f5f9"}, {'range': [75, 100], 'color': "#e2e8f0"}]
+                        'steps': [
+                            {'range': [50, 75], 'color': "#f1f5f9"},
+                            {'range': [75, 100], 'color': "#e2e8f0"}
+                        ]
                     }
                 ))
                 fig_gauge.update_layout(height=240, margin=dict(t=30, b=10, l=30, r=30))
-                st.plotly_chart(fig_gauge, use_container_width=True)
+                st.plotly_chart(fig_gauge, width="stretch")
                 st.caption(f"**Kata hasil preprocessing:** `{cleaned}`")
             else:
                 st.warning("Model .pkl belum tersedia di direktori `models/`.")
